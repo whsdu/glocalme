@@ -1,0 +1,28 @@
+{
+    "GTBU": {
+        "usr": "itquery",
+        "pwd": "eB9QpbvIcHF7rs9eB9QpbvIcHF7rs9",
+        "host": "52.76.227.64",
+        "port": 3306
+    },
+    "NON_GTBU": {
+        "usr": "Queryonly",
+        "pwd": "Queryonly!=",
+        "host": "59.152.232.158",
+        "port": 10023
+    },
+    "REMOTE": {
+        "usr": "useralarm",
+        "pwd": "teyack!990",
+        "host": "52.76.199.199",
+        "port": 3306
+    },
+    "MONGO_GTBU":{
+        "host":"52.76.228.13",
+        "port":57111
+    },
+    "MONGO_NONGTBU":{
+        "host":"202.82.79.129",
+        "port":10076
+    }
+}
