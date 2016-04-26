@@ -24,5 +24,11 @@
     "MONGO_NONGTBU":{
         "host":"202.82.79.129",
         "port":10076
+    },
+    "OMS":{
+        "usr":"itquery",
+        "pwd":"2MdfY9EsdhkldHvKXMkSuyJGJGJhhhIT",
+        "host":"54.222.158.248",
+        "port":55212
     }
 }

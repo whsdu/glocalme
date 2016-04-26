@@ -21,6 +21,8 @@ def getdbinfo(datasource):
         flag = 2
     if readfrom == "MONGO_NONGTBU":
         flag = 2
+    if readfrom == "OMS":
+        flag = 1
 
     print readfrom
     print flag
@@ -29,7 +31,7 @@ def getdbinfo(datasource):
         database!!!"""
         exit(0)
 
-    with open('./dbhost.json') as data_file:
+    with open('/home/dgsystem/wuhao/workspace/z/dbhost.json') as data_file:
         data = json.load(data_file)
     
         print readfrom
