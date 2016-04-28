@@ -15,6 +15,7 @@ omsDict = dict()
 presisDict = dict()
 testingDict = dict()
 onlineDict = dict()
+omsFutureDict= dict()
 
 counter = 1
 logging.basicConfig(filename = 'imsierror.log',format = '%(asctime)s %(message)s',level = logging.DEBUG)
@@ -328,10 +329,10 @@ def fetchsome(cursor, some=1000):
         for row in rows:
             yield row
 
-def partitionList(inputList,outputList):
+def partitionList(inputList,outputList,country):
     cDayList = outputList[0]
     countryList = outputList[1]
-    jpIndex = countryList.index('JP')
+    jpIndex = countryList.index(country)
     outputdataList = outputList[2][jpIndex]
 
     print "output data is: "
@@ -342,10 +343,10 @@ def partitionList(inputList,outputList):
 
     maxcindex = len(cDayList)
     trainingStart = 12
-    trainingend = int(maxcindex*0.7)
+    trainingend = int(maxcindex*1)
 
-    testStart = trainingend
-    testend = maxcindex - 5
+    testStart = trainingStart
+    testend = trainingend
 
     xTrainingSet = list()
     yTrainingSet = list()
@@ -392,6 +393,58 @@ def doNormalization(inputSet):
         input = input/float(stdList[i])
         inputSet[i] = input
 
+def batchTraining(orderList,onlineList):
+    fittingDict = dict()
+    countryList = onlineList[1]
+
+    for country in countryList:
+        testDaylist,xTrainingSet,yTrainingSet,xTestSet,yTestSet = partitionList(orderList,onlineList,country)
+        doNormalization(xTrainingSet)
+        doNormalization(xTestSet)
+
+        # clf = svm.SVR(kernel='rbf', C=1e3, gamma=0.1)
+        # clf.fit(xTrainingSet,yTrainingSet)
+
+        est = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1,max_depth=1, random_state=0, loss='ls').fit(xTrainingSet, yTrainingSet)
+        fittingDict[country] = est
+
+    return fittingDict
+
+def reformTrainingSet(orderList,futureOrderList):
+    trainingMatrix = list()
+    standardPckList = orderList[1]
+    futurePckList = futureOrderList[1]
+    futureNumberMatrix = futureOrderList[2]
+
+    tmpMatrix = list()
+    for futureNumberList in futureNumberMatrix:
+        tmplist = list()
+        for standpck in standardPckList:
+            if standpck in futurePckList:
+                index = futurePckList.index(standpck)
+                tmplist.append(futureNumberList[index])
+            else:
+                tmplist.append(0)
+
+        tmpMatrix.append(tmplist)
+
+    futureOrderList[1] = standardPckList
+    futureOrderList[2] = tmpMatrix
+
+    trainingMatrix = futureOrderList
+    return trainingMatrix
+
+def batchForecasting(fiitingDict,futureOrderList):
+    forecastMatrix = futureOrderList[2]
+    doNormalization(forecastMatrix)
+
+    resultDict = dict()
+    for country,model in fiitingDict.iteritems():
+        tmpResult = model.predict(forecastMatrix)
+        resultDict[country]=tmpResult
+
+    return resultDict
+
 def queryandinsert():
     """ This is the main function which will be call by main... it integrate several other functions.
     Please do not call this function in other pack, otherwise it will cause unexpected result!!!!"""
@@ -400,6 +453,7 @@ def queryandinsert():
     global presisDict
     global counter
     global testingDict
+    global omsFutureDict
 
     starttime = datetime.datetime.now()
 
@@ -427,7 +481,6 @@ def queryandinsert():
     (
     SELECT DATE(logindatetime) AS t1,DATE(logoutdatetime) AS t2, imei,visitcountry
     FROM t_usmguserloginlog
-    WHERE visitcountry IN ('JP','DE','TR')
     ) AS z
     GROUP BY t1,t2,imei
     """
@@ -440,26 +493,22 @@ def queryandinsert():
     (
     SELECT DATE(epochTime) AS epochTime,visitcountry,onlinenum
     FROM t_fordemo
-    WHERE butype =2 and visitcountry IN ('JP','DE','TR')
+    WHERE butype =2
     ) AS z
     GROUP BY epochTime,visitcountry
     """
 
     # (input data) get the order number information which will be used to calculate the daily maximum number for each country...
-    # this number could be ridiculously large with respect to the real number for some specific countries.
+    # this number could be ridiculously large with respect to the real amount for some specific countries.
     querystatementOMS = """
     SELECT DATE(date_goabroad),DATE(date_repatriate),DATEDIFF(date_repatriate,date_goabroad),imei,package_id FROM tbl_order_basic
     WHERE imei IS NOT NULL AND (DATE(date_repatriate)) > '2016-01-01' AND DATE(date_goabroad) < DATE(NOW())
     ORDER BY date_repatriate ASC
     """
 
-    querystatementOMSCount = """
-    SELECT  date_goabroad,date_repatriate,DATEDIFF(date_repatriate,date_goabroad),t1.package_id,t3.iso2 FROM tbl_order_basic AS t1
-    LEFT JOIN tbl_package_countries AS t2
-    ON t1.package_id = t2.package_id
-    LEFT JOIN tbl_country AS t3
-    ON t2.country_id = t3.pk_global_id
-    WHERE t1.data_status = 0 AND DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 3 MONTH) OR
+    querystatementOMSFuture = """
+    SELECT DATE(date_goabroad),DATE(date_repatriate),DATEDIFF(date_repatriate,date_goabroad),imei,package_id FROM tbl_order_basic
+    WHERE data_status = 0 AND DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 3 MONTH) OR
     (
     DATE(date_repatriate) >= DATE(NOW())
     )
@@ -486,25 +535,15 @@ def queryandinsert():
     queryCurOMS = querydbOMS.cursor()
     insertCur = insertdb.cursor()
 
-    print "executing query!!! By using generator!!!"
-    queryCurGTBU.execute(queryStatementTraining)
-    testingSetGenerator = fetchsome(queryCurGTBU,30000) #fetchsome is a generator which will fetch a certain number of query each time.
+    # print "executing query!!! By using generator!!!"
+    # queryCurGTBU.execute(queryStatementTraining)
+    # testingSetGenerator = fetchsome(queryCurGTBU,30000) #fetchsome is a generator which will fetch a certain number of query each time.
+    #
+    # for row in testingSetGenerator:
+    #     accumulator(row,testingDict)
+    #
+    # testList = getTestingList(testingDict)      # testList is [daylist,countrylist,2dArray with shape (len(countrylist),len(daylist))
 
-    for row in testingSetGenerator:
-        accumulator(row,testingDict)
-
-    print " print Testing Dict"
-    print "...."
-    print testingDict
-
-    testList = getTestingList(testingDict)      # testList is [daylist,countrylist,2dArray with shape (len(countrylist),len(daylist))
-    print "...print tseting List"
-    print testList
-    print len(testList[0])
-    print len(testList[1])
-    print len(testList[2][0])
-
-    print " Start counting online number !!!....................."
     insertCur.execute(queryStatementOnline)
     onlineSetGenerator = fetchsome(insertCur,3000)
     for row in onlineSetGenerator:
@@ -512,102 +551,122 @@ def queryandinsert():
 
 
     onlineList = getTestingList(onlineDict)     # online is [daylist,countrylist,2dArray with shape (len(countrylist),len(daylist))
-    print "....print online List"
-    print onlineList
-    print len(onlineList[0])
-    print len(onlineList[1])
-    print len(onlineList[2][0])
 
-    print "start count order number!!!....."
     queryCurOMS.execute(querystatementOMS)
     omsOrderGenerator = fetchsome(queryCurOMS,3000)
     for row in omsOrderGenerator:
         accumulator(row,omsDict)
 
     orderList = getTestingList(omsDict)      #orderList is [daylist,pcklist,2dArray with shape (len(pcklist),len(daylist))
-    print "print order List"
-    print orderList
-    print len(orderList[0])
-    print len(orderList[1])
-    print len(orderList[2][0])
 
-    print "transform the two D array.."
     untranList = orderList[2]               # dimensio of out put is len(daylist), so dimension of each input is len(packlist)
     tranlist = transfromIndex(untranList)   # so we need to change the shape(orderlist[2]) = len(pcklst),len(daylist) to len(daylist), len(pcklist)
     orderList[2] = tranlist
 
-    print len(orderList[0])
-    print len(orderList[1])
-    print len(orderList[2])
-    print len(orderList[2][0])
+    fittingDict = batchTraining(orderList,onlineList)
 
-    print orderList[0]
-    print onlineList[0]
+    print fittingDict
+    print fittingDict.keys()
+    print len(fittingDict.keys())
+
+    print " start predict future"
+    queryCurOMS.execute(querystatementOMSFuture)
+    omsFutureOrderGenerator = fetchsome(queryCurOMS,3000)
+    for row in omsFutureOrderGenerator:
+        accumulator(row,omsFutureDict)
+
+    futureOrderList = getTestingList(omsFutureDict)
+
+    untranList = futureOrderList[2]               # dimensio of out put is len(daylist), so dimension of each input is len(packlist)
+    tranlist = transfromIndex(untranList)   # so we need to change the shape(orderlist[2]) = len(pcklst),len(daylist) to len(daylist), len(pcklist)
+    futureOrderList[2] = tranlist
+
+    futureOrderList = reformTrainingSet(orderList,futureOrderList)
+    forecastDict = batchForecasting(fittingDict,futureOrderList)
+
+    print forecastDict
+    print futureOrderList[0]
+    print len(futureOrderList[0])
+    print len(forecastDict['JP'])
+
+    insertCur.execute("delete from t_maxpredict")
+    insertdb.commit()
+
+    now = datetime.datetime.now()
+    for dateindex,furturedate in enumerate(futureOrderList[0]):
+        for country,forecast in forecastDict.iteritems():
+            insertCur.execute('''insert into t_maxpredict(recordtime,date,country,max) values(%s,%s,%s,%s)''',(now,furturedate,country,forecast[dateindex]))
 
 
-    testDaylist,xTrainingSet,yTrainingSet,xTestSet,yTestSet = partitionList(orderList,onlineList)
-    doNormalization(xTrainingSet)
-    doNormalization(xTestSet)
+    querydbGTBU.close()
+    querydbOMS.close()
+    insertdb.commit()
+    insertdb.close()
 
-    print len(xTrainingSet)
-    print len(yTrainingSet)
-    print len(xTestSet)
-    print len(yTestSet)
-
-    clf = svm.SVR(kernel='rbf', C=1e3, gamma=0.1)
-    clf.fit(xTrainingSet,yTrainingSet)
-    svmPredict = clf.predict(xTestSet)
-
-    est = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1,max_depth=1, random_state=0, loss='ls').fit(xTrainingSet, yTrainingSet)
-    ensemblePredict = est.predict(xTestSet)
-
-    x_axis = testDaylist
-
-    online = go.Scatter(
-        x = x_axis,
-        y = yTestSet,
-        mode = 'lines+markers',
-        name = "actual"
-    )
-
-    onlineSVM=go.Scatter(
-        x = x_axis,
-        y = svmPredict,
-        mode = 'lines+markers',
-        name = "predictSVM"
-    )
-
-    onlineEnsumble=go.Scatter(
-        x = x_axis,
-        y = ensemblePredict,
-        mode = 'lines+markers',
-        name = "predictEnsumble"
-    )
-
-    layout = dict(title = 'Prediction',
-              xaxis = dict(title = 'Date'),
-              yaxis = dict(title = 'online Number'),
-              )
-
-    data = [online,onlineSVM,onlineEnsumble]
-    fig = dict(data=data, layout=layout)
-
-    plot(fig,filename ="/usr/local/apache-tomcat-7.0.67/webapps/demoplotly/prediction.html",auto_open=False)
-
-    print " one process finished!!!!!..........."
-
-    print testDaylist
-    print len(testDaylist)
-
-    print xTrainingSet
-    print xTestSet
-    print len(xTrainingSet)
-    print len(xTestSet)
-    print "..."
-    print yTrainingSet
-    print yTestSet
-    print len(yTrainingSet)
-    print len(yTestSet)
+    #
+    # testDaylist,xTrainingSet,yTrainingSet,xTestSet,yTestSet = partitionList(orderList,onlineList,'DE')
+    # doNormalization(xTrainingSet)
+    # doNormalization(xTestSet)
+    #
+    # print len(xTrainingSet)
+    # print len(yTrainingSet)
+    # print len(xTestSet)
+    # print len(yTestSet)
+    #
+    # clf = svm.SVR(kernel='rbf', C=1e3, gamma=0.1)
+    # clf.fit(xTrainingSet,yTrainingSet)
+    # svmPredict = clf.predict(xTestSet)
+    #
+    # est = GradientBoostingRegressor(n_estimators=100, learning_rate=0.1,max_depth=1, random_state=0, loss='ls').fit(xTrainingSet, yTrainingSet)
+    # ensemblePredict = est.predict(xTestSet)
+    #
+    # x_axis = testDaylist
+    #
+    # online = go.Scatter(
+    #     x = x_axis,
+    #     y = yTestSet,
+    #     mode = 'lines+markers',
+    #     name = "actual"
+    # )
+    #
+    # onlineSVM=go.Scatter(
+    #     x = x_axis,
+    #     y = svmPredict,
+    #     mode = 'lines+markers',
+    #     name = "predictSVM"
+    # )
+    #
+    # onlineEnsumble=go.Scatter(
+    #     x = x_axis,
+    #     y = ensemblePredict,
+    #     mode = 'lines+markers',
+    #     name = "predictEnsumble"
+    # )
+    #
+    # layout = dict(title = 'Prediction',
+    #           xaxis = dict(title = 'Date'),
+    #           yaxis = dict(title = 'online Number'),
+    #           )
+    #
+    # data = [online,onlineSVM,onlineEnsumble]
+    # fig = dict(data=data, layout=layout)
+    #
+    # plot(fig,filename ="/usr/local/apache-tomcat-7.0.67/webapps/demoplotly/prediction.html",auto_open=False)
+    #
+    # print " one process finished!!!!!..........."
+    #
+    # print testDaylist
+    # print len(testDaylist)
+    #
+    # print xTrainingSet
+    # print xTestSet
+    # print len(xTrainingSet)
+    # print len(xTestSet)
+    # print "..."
+    # print yTrainingSet
+    # print yTestSet
+    # print len(yTrainingSet)
+    # print len(yTestSet)
 
 if __name__=="__main__":
     queryandinsert()
@@ -615,4 +674,9 @@ if __name__=="__main__":
     while True:
         schedule.run_pending()
         time.sleep(1)
-
+        gtbuDict.clear()
+        omsDict.clear()
+        presisDict.clear()
+        testingDict.clear()
+        onlineDict.clear()
+        omsFutureDict.clear()

@@ -8,11 +8,15 @@ import json
 import numpy as np
 from kits import getdbinfo
 from collections import defaultdict
+from pymongo import MongoClient
 
 lastEpochGtbu = 0
 lastEpochNon = 0
 epoch =0
 querydbname = "ucloudplatform"
+step = 52428800
+minN = 0
+maxN = 10737400000
 
 preDictGtbu = defaultdict(int)
 preDictNon = defaultdict(int)
@@ -44,24 +48,56 @@ def retrieveByDay(row,preDict,belong):
         preDict.clear()
 
 def seriDict(recordtime,preDict,belong):
-    flowSizeList = list()
-    upList = list()
-    downList = list()
+    client = MongoClient()
+    db = client['login_history']
+    col = db['col_flowPro']
+
+    countrySet = set()
+    countryListDict = dict()
+    dateCountryDict = dict()
+    dt = recordtime[belong]
+    ds = datetime.datetime(*(dt.timetuple()[:6]))
+
+    for key in preDict:
+        countrySet.add(key[1])
+
+    for country in list(countrySet):
+        countryListDict[country]=[list(),list(),list()]
 
     for key,value in preDict.iteritems():
+        flowSizeList = countryListDict.get(key[1])[0]
+        upList = countryListDict.get(key[1])[1]
+        downList = countryListDict.get(key[1])[2]
+
         flowSizeList.append(value.get("flowsize"))
         upList.append(value.get("up"))
         downList.append(value.get("down"))
 
-    flowSizeJSON = getJSONpdf(flowSizeList)
-    upJSON = getJSONpdf(upList)
-    downJSON = getJSONpdf(downList)
+    for key,value in countryListDict.iteritems():
+        flowSizeList = value[0]
+        upList = value[1]
+        downList = value[2]
 
-    print "........" + str(belong)
-    print recordtime[belong]
-    print flowSizeJSON
-    print upJSON
-    print downJSON
+        flowSizeJSON = getJSONpdf(flowSizeList)
+        upJSON = getJSONpdf(upList)
+        downJSON = getJSONpdf(downList)
+
+        proDict = {"flowSize":flowSizeJSON,"up":upJSON,"down":downJSON}
+
+        # countryTmpDict = dateCountryDict.get(datetime,dict())
+
+        post = {"datetime":ds,"country":key,"distribution":proDict,"butype":belong}
+        col.insert_one(post)
+    #
+    #     countryTmpDict[key]=proDict
+    #     dateCountryDict[datetime]=countryTmpDict
+    #
+    # countryDict = dateCountryDict.get(datetime)
+    # post = {"datetime":ds,"countryDetail":countryDict,"butype":belong}
+    #
+    # col.insert_one(post)
+
+    client.close()
 
     # insertDBinfo = getdbinfo("REMOTE")
     # insertRemote =  MySQLdb.connect(user = insertDBinfo['usr'],passwd = insertDBinfo['pwd'], host = insertDBinfo['host'], port = insertDBinfo['port'], db = "login_history")
@@ -71,11 +107,20 @@ def seriDict(recordtime,preDict,belong):
     # cursor.commit()
 
 def getJSONpdf(dataList):
-    count,bins = np.histogram(dataList)
+    global step
+    global minN
+    global maxN
+
+    maxL = int(max(dataList)+1)
+    if maxL > maxN:
+        maxN = maxL
+
+    binsList = range(minN,maxN+step,step)
+    count,bins = np.histogram(dataList,bins = binsList)
     pro = 1. * count/np.sum(count)
     pdfJSON = dict()
-    pdfJSON['pro'] = pro
-    pdfJSON['bin'] = bins
+    pdfJSON['pro'] = list(pro)
+    pdfJSON['bin'] = list(bins)
 
     return pdfJSON
 
