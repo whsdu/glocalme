@@ -20,7 +20,7 @@ def accumulator(row,recordDict):
     for i in range(0,interval):
         keylist.append(start+timedelta(days = i))
 
-    pck = row[3]
+    pck = row[3].encode('utf-8')
     country = row[4]
 
     for key in keylist:
@@ -36,8 +36,6 @@ def accumulator(row,recordDict):
             maxList[i] +=1
 
         recordDict[key] = detail
-
-    print "processing record...:" + str(counter)
     counter +=1
 
 
@@ -75,13 +73,13 @@ def queryandinsert():
     ON t1.package_id = t2.package_id
     LEFT JOIN tbl_country AS t3
     ON t2.country_id = t3.pk_global_id
-    WHERE t1.data_status = 0 AND DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 1 day)
-    # OR
-    # (
-    # DATE(date_repatriate) >= DATE(NOW())
-    # )
+    WHERE t1.data_status = 0 AND DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 3 MONTH)
+    OR
+    (
+    DATE(date_repatriate) >= DATE(NOW())
+    )
     """
-    querydb = MySQLdb.connect(user = querydbinfo['usr'],passwd = querydbinfo['pwd'], host = querydbinfo['host'], port = querydbinfo['port'], db = querydbname)
+    querydb = MySQLdb.connect(user = querydbinfo['usr'],passwd = querydbinfo['pwd'], host = querydbinfo['host'], port = querydbinfo['port'], db = querydbname,charset='utf8')
     insertdb = MySQLdb.connect(user = insertdbinfo['usr'],passwd = insertdbinfo['pwd'], host = insertdbinfo['host'], port = insertdbinfo['port'], db = insertdbname,charset='utf8')
     queryCur = querydb.cursor()
     insertCur = insertdb.cursor()
@@ -107,7 +105,7 @@ def queryandinsert():
         for index,pckage in enumerate(pckList):
             now = n
             date = key
-            pck = pckage
+            pck = pckage.encode('utf-8')
             max = maxList[index]
 
             print "package is: " + str(pck)
