@@ -20,8 +20,7 @@ def accumulator(row,recordDict):
     for i in range(0,interval):
         keylist.append(start+timedelta(days = i))
 
-    pck = row[3].encode('utf-8')
-    country = row[4]
+    pck = row[4].encode('utf-8')
 
     for key in keylist:
         detail = recordDict.get(key,{"packages":[],"max":[]})
@@ -68,16 +67,15 @@ def queryandinsert():
         print key + " : " + str(value)
 
     querystatement = """
-    SELECT  date_goabroad,date_repatriate,DATEDIFF(date_repatriate,date_goabroad),package_name,t3.iso2 FROM tbl_order_basic AS t1
-    LEFT JOIN tbl_package_countries AS t2
-    ON t1.package_id = t2.package_id
-    LEFT JOIN tbl_country AS t3
-    ON t2.country_id = t3.pk_global_id
-    WHERE t1.data_status = 0 AND DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 3 MONTH)
-    OR
-    (
-    DATE(date_repatriate) >= DATE(NOW())
-    )
+    SELECT DATE(date_goabroad),DATE(date_repatriate),DATEDIFF(date_repatriate,date_goabroad),imei,package_name FROM tbl_order_basic
+    WHERE
+	  data_status = 0 						AND
+	(
+		DATE(date_goabroad) BETWEEN DATE(NOW()) AND DATE_ADD(NOW(),INTERVAL 3 MONTH) OR
+		(
+		DATE(date_goabroad) < DATE(NOW()) AND DATE(date_repatriate) >= DATE(NOW())
+		)
+	)
     """
     querydb = MySQLdb.connect(user = querydbinfo['usr'],passwd = querydbinfo['pwd'], host = querydbinfo['host'], port = querydbinfo['port'], db = querydbname,charset='utf8')
     insertdb = MySQLdb.connect(user = insertdbinfo['usr'],passwd = insertdbinfo['pwd'], host = insertdbinfo['host'], port = insertdbinfo['port'], db = insertdbname,charset='utf8')
