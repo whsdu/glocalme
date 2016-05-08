@@ -455,7 +455,7 @@ def batchForecasting(fiitingDict,futureOrderList):
 def fillDailyMaxMatrix(dailyMax,futureOrderList,forecastDict):
     global adjustTimeInterval
 
-    datelist = futureOrderList[0:adjustTimeInterval]
+    datelist = futureOrderList[0][0:adjustTimeInterval]
 
     for dateindex,futuredate in enumerate(datelist):
         for country,forecastList in forecastDict.iteritems():
@@ -592,6 +592,14 @@ def getCountryAdjust():
             tmpDict[interval] = (sv,std)
         countryAdjust[country]=tmpDict
 
+def getDBconnection(dbinfor,dbname):
+    dbconnection = MySQLdb.connect(user = dbinfor['usr'],
+                                  passwd = dbinfor['pwd'],
+                                  host = dbinfor['host'],
+                                  port = dbinfor['port'],
+                                  db = dbname)
+    return dbconnection
+
 def queryandinsert():
     """ This is the main function which will be call by main... it integrate several other functions.
     Please do not call this function in other pack, otherwise it will cause unexpected result!!!!"""
@@ -670,21 +678,25 @@ def queryandinsert():
     GROUP BY visitcountry
     """
     # establish connection to the mysql databases................
-    querydbGTBU = MySQLdb.connect(user = querydbinfoGTBU['usr'],
-                                  passwd = querydbinfoGTBU['pwd'],
-                                  host = querydbinfoGTBU['host'],
-                                  port = querydbinfoGTBU['port'],
-                                  db = querydbnameGTBU)
-    querydbOMS = MySQLdb.connect(user = querydbinfoOMS['usr'],
-                                 passwd = querydbinfoOMS['pwd'],
-                                 host = querydbinfoOMS['host'],
-                                 port = querydbinfoOMS['port'],
-                                 db = querydbnameOMS)
-    insertdb = MySQLdb.connect(user = insertdbinfo['usr'],
-                               passwd = insertdbinfo['pwd'],
-                               host = insertdbinfo['host'],
-                               port = insertdbinfo['port'],
-                               db = insertdbname)
+    # querydbGTBU = MySQLdb.connect(user = querydbinfoGTBU['usr'],
+    #                               passwd = querydbinfoGTBU['pwd'],
+    #                               host = querydbinfoGTBU['host'],
+    #                               port = querydbinfoGTBU['port'],
+    #                               db = querydbnameGTBU)
+    # querydbOMS = MySQLdb.connect(user = querydbinfoOMS['usr'],
+    #                              passwd = querydbinfoOMS['pwd'],
+    #                              host = querydbinfoOMS['host'],
+    #                              port = querydbinfoOMS['port'],
+    #                              db = querydbnameOMS)
+    # insertdb = MySQLdb.connect(user = insertdbinfo['usr'],
+    #                            passwd = insertdbinfo['pwd'],
+    #                            host = insertdbinfo['host'],
+    #                            port = insertdbinfo['port'],
+    #                            db = insertdbname)
+
+    querydbGTBU = getDBconnection(querydbinfoGTBU,querydbnameGTBU)
+    querydbOMS = getDBconnection(querydbinfoOMS,querydbnameOMS)
+    insertdb = getDBconnection(insertdbinfo,insertdbname)
 
     queryCurGTBU = querydbGTBU.cursor()
     queryCurOMS = querydbOMS.cursor()
@@ -754,10 +766,18 @@ def queryandinsert():
     futureOrderList = reformTrainingSet(orderList,futureOrderList)      #the predict set need  to be reformed so that packages in predict set can be aligned with pcks in training set.
     forecastDict = batchForecasting(fittingDict,futureOrderList)
 
+    querydbOMS.close()
+    insertdb.close()
+    
     print forecastDict
     print futureOrderList[0]
     print len(futureOrderList[0])
     print len(forecastDict['JP'])
+
+    querydbOMS = getDBconnection(querydbinfoOMS,querydbnameOMS)
+    insertdb = getDBconnection(insertdbinfo,insertdbname)
+    queryCurOMS = querydbOMS.cursor()
+    insertCur = insertdb.cursor()
 
     insertCur.execute("delete from t_maxpredict_std")
     insertdb.commit()
