@@ -89,7 +89,7 @@ def accumulator(row,recordDict):
 
         recordDict[key] = detail
 
-    print "processing record...:" + str(counter)
+    # print "processing record...:" + str(counter)
     counter +=1
 
 def getRatio(countries,Ratios):
@@ -186,16 +186,16 @@ def getTestingList(dcDict):
 
                 t = countryList.index(c)
                 nonZeroUpdateList.append(t)
-                logging.info( "insert into country: " + str(c) + " number: " + str(numbers[place]) + " at day: " + str(date))
+                # logging.info( "insert into country: " + str(c) + " number: " + str(numbers[place]) + " at day: " + str(date))
             else:
                 numberList[i].append(numbers[place])
                 nonZeroUpdateList.append(i)
-                logging.info( "update country: " + str(c) + " number: " + str(numbers[place]) + " at day: " + str(date))
+                # logging.info( "update country: " + str(c) + " number: " + str(numbers[place]) + " at day: " + str(date))
 
         for k in range(0,len(numberList)):
             if k not in nonZeroUpdateList:
                 numberList[k].append(0)
-                logging.info( "insert zero country: "+countryList[k] +"  at day: " + str(date))
+                # logging.info( "insert zero country: "+countryList[k] +"  at day: " + str(date))
 
         listIndicator +=1
 
@@ -274,13 +274,13 @@ def mapReduce(row,dcDict):
 
     for i in range(0,interval):
         dayList.append(start+timedelta(days = i))
-        logging.info(str(start+timedelta(days = i)))
+        # logging.info(str(start+timedelta(days = i)))
 
     for day in dayList:
         tmpkey = (day,imei)
         dcDict[tmpkey] = value
 
-    print "processing record...:" + str(counter)
+    # print "processing record...:" + str(counter)
     counter +=1
 
 def affineTransform(rDict,lDict):
@@ -363,16 +363,16 @@ def partitionList(inputList,outputList,country):
         if day not in inputDayList:
             continue
 
-        print "Training at day: " + str(day)
+        # print "Training at day: " + str(day)
         yTrainingSet.append(outputdataList[i])
-        print "Training output is: " + str(outputdataList[i])
+        # print "Training output is: " + str(outputdataList[i])
 
         index = inputDayList.index(day)
         tmpinput =inputDataList[index]
         xTrainingSet.append(tmpinput)
 
-        print " Training input is: "
-        print tmpinput
+        # print " Training input is: "
+        # print tmpinput
 
     xTestSet = list()
     yTestSet = list()
@@ -464,26 +464,36 @@ def fillDailyMaxMatrix(dailyMax,futureOrderList,forecastDict):
             if forcast > curMax:
                     dailyMax[(country,futuredate)] = forcast
 
+    print dailyMax
+
 def storeDailyMax (processDate,dailyMax):
+    print " the porcess date is : "
+    print processDate
+
+    print dailyMax
+
     client = MongoClient()
     db = client['login_history']
     col = db['col_dailymax']
-    forecastDateList = list()
-    forecastNumList = list()
+
     yesterdayPredict = dict()
+    pdate = datetime.datetime(*(processDate.timetuple()[:6]))
 
     for key,value in dailyMax.iteritems():
         country = key[0]
         date = key[1]
+        forecastDateList = list()
+        forecastNumList = list()
+
         date = datetime.datetime(*(date.timetuple()[:6]))
         tmpDoc = col.find_one({'targetDate':date,'targetCountry':country},{'forecastDate':1,'forecastNum':1})
         if tmpDoc is None:
-            forecastDateList.append(processDate)
+            forecastDateList.append(pdate)
             forecastNumList.append(value)
         else:
             forecastDateList = tmpDoc['forecastDate']
             forecastNumList = tmpDoc['forecastNum']
-            forecastDateList.append(processDate)
+            forecastDateList.append(pdate)
             forecastNumList.append(value)
 
         tmpResult = col.update({'targetDate':date,'targetCountry':country},
@@ -491,8 +501,11 @@ def storeDailyMax (processDate,dailyMax):
                                upsert = True)
 
         print tmpResult
+        print date
+        print country
+        print "....."
 
-    cursor = col.find({'targetDate':processDate})
+    cursor = col.find({'targetDate':pdate})
 
     for doc in cursor:
         country = doc['targetCountry']
@@ -500,7 +513,10 @@ def storeDailyMax (processDate,dailyMax):
         numList = doc['forecastNum']
         yesterdayPredict[country]=[dateList,numList]
 
-    col.delete_many({'targetDate':{'$lt':processDate}})
+    print "this is processdate:"
+    print pdate
+
+    col.delete_many({'targetDate':{'$lt':pdate}})
 
     dailyMax.clear()
     client.close()
@@ -517,12 +533,27 @@ def adjustForecast(processDate,yesterdayPredict,theTruth):
         anumlist = anumlist - truevalue
         numlist = list(anumlist)
 
+        print ".....<<.>>...."
+
         intervalList = list()
         for day in datelist:
-            intervalList.append((processDate-day).days)
-        countryThisRoundAdjust[country] = [intervalList.reverse(),numlist.reverse()]
+            tmpDate = day.date()
+            intervalList.append((processDate-tmpDate).days)
+
+        numlist.reverse()
+        intervalList.reverse()
+        print numlist
+        print intervalList
+
+        countryThisRoundAdjust[country] = [intervalList,numlist]
+
+    print processDate
+    print yesterdayPredict
+    print theTruth
+    print countryThisRoundAdjust
 
     countryAdjust = processAdjustCube(countryThisRoundAdjust)
+
 
     return countryAdjust
 
@@ -558,8 +589,7 @@ def processAdjustCube(countryThisRoundAdjust):
     getCountryAdjust()
     client.close()
 
-def initialAdjustDict():
-    global adjustDict
+def initialAdjustDict(adjustDict):
 
     client = MongoClient()
     db = client['login_history']
@@ -591,6 +621,12 @@ def getCountryAdjust():
             std = np.std(numlistlist)
             tmpDict[interval] = (sv,std)
         countryAdjust[country]=tmpDict
+
+def trimFutureDict(processDate,reDict):
+
+    for key in reDict.keys():
+        if key < processDate:
+            del reDict[key]
 
 def getDBconnection(dbinfor,dbname):
     dbconnection = MySQLdb.connect(user = dbinfor['usr'],
@@ -713,7 +749,15 @@ def queryandinsert():
 
     today = datetime.datetime.now().date()
 
+    print "today is: "
+    print today
+
+    print "...."
+    print "process date is: "
+    print processDate
+
     if today != processDate:
+        print " start doing std"
         countryAdjust.clear()
         yesterdayPredict = storeDailyMax(processDate,dailyMax)
         insertCur.execute(querystatementYesterday)
@@ -757,6 +801,11 @@ def queryandinsert():
     for row in omsFutureOrderGenerator:
         accumulator(row,omsFutureDict)
 
+    trimFutureDict(processDate,omsFutureDict)
+
+    print ".......>>>>  Dates after trimed <<<<<............."
+    print omsFutureDict.keys()
+
     futureOrderList = getTestingList(omsFutureDict)
 
     untranList = futureOrderList[2]               # dimensio of out put is len(daylist), so dimension of each input is len(packlist)
@@ -768,7 +817,7 @@ def queryandinsert():
 
     querydbOMS.close()
     insertdb.close()
-    
+
     print forecastDict
     print futureOrderList[0]
     print len(futureOrderList[0])
@@ -792,7 +841,7 @@ def queryandinsert():
             std = 0
             if len(countryAdjust.keys()) != 0:
                 interval = (furturedate-today).days
-                rDict = countryAdjust.get(country)
+                rDict = countryAdjust.get(country,dict())
                 if interval in rDict.keys():
                     rT = rDict.get(interval)
                     avg = rT[0]
@@ -807,9 +856,11 @@ def queryandinsert():
     insertdb.close()
 
 if __name__=="__main__":
-    initialAdjustDict()
+    global adjustDict
+
+    initialAdjustDict(adjustDict)
     queryandinsert()
-    schedule.every(60).minutes.do(queryandinsert)
+    schedule.every(2).hours.do(queryandinsert)
     while True:
         schedule.run_pending()
         time.sleep(1)
