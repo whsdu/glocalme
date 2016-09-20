@@ -23,9 +23,12 @@ def getdbinfo(datasource):
         flag = 2
     if readfrom == "OMS":
         flag = 1
-
-    print readfrom
-    print flag
+    if readfrom == "CRM":
+        flag = 1
+    if readfrom =="ASS_GTBU":
+        flag = 1
+    if readfrom == "UCC":
+        flag = 1
     if flag == 0:
         print """ Usage: use key words GTBU,NON_GTBU,REMOTE to chose the
         database!!!"""
@@ -34,14 +37,11 @@ def getdbinfo(datasource):
     with open('/home/dgsystem/wuhao/workspace/z/dbhost.json') as data_file:
         data = json.load(data_file)
     
-        print readfrom
         
         if flag == 2:
             hostinfor["host"] = data[readfrom]["host"]
             hostinfor["port"] = data[readfrom]["port"]
 
-            print hostinfor["host"]
-            print hostinfor["port"]
         else:
             hostinfor["usr"] = data[readfrom]["usr"]
             hostinfor["pwd"] = data[readfrom]["pwd"]
@@ -53,7 +53,6 @@ def getdbinfo(datasource):
 
 if __name__=="__main__":
     gtbu = sys.argv[1]
-    print gtbu
 
     hostinfor = getdbinfo(gtbu)
     

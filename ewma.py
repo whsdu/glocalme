@@ -341,7 +341,7 @@ def queryandinsert():
     data = [onlineEWMA,onlinePre]
     fig = dict(data=data, layout=layout)
 
-    plot(fig,filename ="/usr/local/apache-tomcat-7.0.67/webapps/demoplotly/EWMAprediction.html",auto_open=False)
+    plot(fig,filename ="/ukl/apache-tomcat-7.0.67/webapps/demoplotly/EWMAprediction.html",auto_open=False)
 
 
 if __name__=="__main__":

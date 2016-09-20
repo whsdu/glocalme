@@ -651,7 +651,7 @@ def queryandinsert():
     # data = [online,onlineSVM,onlineEnsumble]
     # fig = dict(data=data, layout=layout)
     #
-    # plot(fig,filename ="/usr/local/apache-tomcat-7.0.67/webapps/demoplotly/prediction.html",auto_open=False)
+    # plot(fig,filename ="/ukl/apache-tomcat-7.0.67/webapps/demoplotly/prediction.html",auto_open=False)
     #
     # print " one process finished!!!!!..........."
     #
