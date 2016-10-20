@@ -98,6 +98,7 @@ if __name__ == "__main__":
     # for i in range(30):
     #     serilizeResult(i+1)
 
+    serilizeResult()
     schedule.every().day.at("01:10").do(serilizeResult)
     while 1:
         schedule.run_pending()
